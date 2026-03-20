@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { supabase } from './supabase';
 
 const diasSemana = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
@@ -12,6 +12,33 @@ const diasNombre = {
   Dom: 'Domingo',
 };
 const serieVacia = () => ({ reps: '', peso: '' });
+
+const inputStyle = {
+  border: '1px solid #DBEAFE',
+  borderRadius: 8,
+  padding: '7px 10px',
+  fontSize: 14,
+  outline: 'none',
+  color: '#374151',
+  background: '#fff',
+};
+
+const sensacionColores = [
+  '',
+  '#BFDBFE',
+  '#93C5FD',
+  '#60A5FA',
+  '#3B82F6',
+  '#1D4ED8',
+];
+const sensacionTextoColores = [
+  '',
+  '#1E3A5F',
+  '#1E3A5F',
+  '#fff',
+  '#fff',
+  '#fff',
+];
 
 function formatTime(seg) {
   const m = Math.floor(seg / 60)
@@ -68,7 +95,7 @@ function ProgresoGeneral({ onVolver }) {
         >
           ← Volver
         </button>
-        <div style={{ color: '#888', fontSize: 14 }}>Cargando...</div>
+        <div style={{ color: '#888' }}>Cargando...</div>
       </div>
     );
 
@@ -150,35 +177,30 @@ function ProgresoGeneral({ onVolver }) {
           sesionesDelMes.length
       )
     : 0;
-  const todasValoraciones = sesiones.flatMap((s) =>
+  const todasVal = sesiones.flatMap((s) =>
     (s.datos || []).map((d) => d.valoracion || 0).filter((v) => v > 0)
   );
-  const sensacionProm = todasValoraciones.length
-    ? (
-        todasValoraciones.reduce((a, b) => a + b, 0) / todasValoraciones.length
-      ).toFixed(1)
+  const sensacionProm = todasVal.length
+    ? (todasVal.reduce((a, b) => a + b, 0) / todasVal.length).toFixed(1)
     : '-';
-
   const semanas8 = Array.from({ length: 8 }, (_, i) => {
     const fin = new Date(getLunes(ahora));
     fin.setDate(fin.getDate() + 7 - (8 - i) * 7 + 6);
     const ini = new Date(fin);
     ini.setDate(fin.getDate() - 6);
-    const count = sesiones.filter((s) => {
+    return sesiones.filter((s) => {
       const d = new Date(s.creado_en);
       return d >= ini && d <= fin;
     }).length;
-    return count;
   });
   const maxSemana = Math.max(...semanas8, 1);
-
   const sensacionPorGrupo = {};
   sesiones.forEach((s) => {
     (s.datos || []).forEach((d) => {
       if (!d.valoracion) return;
-      const grupo = d.ejercicio?.split(' ')[0] || 'Otros';
-      if (!sensacionPorGrupo[grupo]) sensacionPorGrupo[grupo] = [];
-      sensacionPorGrupo[grupo].push(d.valoracion);
+      const g = d.ejercicio?.split(' ')[0] || 'Otros';
+      if (!sensacionPorGrupo[g]) sensacionPorGrupo[g] = [];
+      sensacionPorGrupo[g].push(d.valoracion);
     });
   });
   const promediosPorGrupo = Object.entries(sensacionPorGrupo)
@@ -190,45 +212,35 @@ function ProgresoGeneral({ onVolver }) {
     }))
     .sort((a, b) => b.prom - a.prom)
     .slice(0, 6);
-
   const progresoPorEjercicio = {};
   sesiones.forEach((s) => {
     (s.datos || []).forEach((d) => {
-      const nombre = d.ejercicio;
-      const maxPeso = Math.max(
+      const n = d.ejercicio;
+      const mp = Math.max(
         ...(d.series || []).map((s) => parseFloat(s.peso) || 0)
       );
-      if (!progresoPorEjercicio[nombre]) progresoPorEjercicio[nombre] = [];
-      if (maxPeso > 0)
-        progresoPorEjercicio[nombre].push({
-          fecha: s.creado_en,
-          peso: maxPeso,
-        });
+      if (!progresoPorEjercicio[n]) progresoPorEjercicio[n] = [];
+      if (mp > 0)
+        progresoPorEjercicio[n].push({ fecha: s.creado_en, peso: mp });
     });
   });
-
   const progresosConDiff = Object.entries(progresoPorEjercicio)
-    .filter(([, vals]) => vals.length >= 2)
-    .map(([nombre, vals]) => {
-      const primero = vals[0].peso;
-      const ultimo = vals[vals.length - 1].peso;
-      return {
-        nombre,
-        primero,
-        ultimo,
-        diff: parseFloat((ultimo - primero).toFixed(1)),
-      };
-    })
+    .filter(([, v]) => v.length >= 2)
+    .map(([n, v]) => ({
+      nombre: n,
+      primero: v[0].peso,
+      ultimo: v[v.length - 1].peso,
+      diff: parseFloat((v[v.length - 1].peso - v[0].peso).toFixed(1)),
+    }))
     .sort((a, b) => b.diff - a.diff)
     .slice(0, 5);
-
   const estancados = Object.entries(progresoPorEjercicio)
-    .filter(([, vals]) => vals.length >= 3)
-    .filter(([, vals]) => {
-      const ult3 = vals.slice(-3);
-      return ult3.every((v) => v.peso === ult3[0].peso);
+    .filter(([, v]) => v.length >= 3)
+    .filter(([, v]) => {
+      const u = v.slice(-3);
+      return u.every((x) => x.peso === u[0].peso);
     })
-    .map(([nombre]) => nombre);
+    .map(([n]) => n);
 
   return (
     <div
@@ -256,7 +268,6 @@ function ProgresoGeneral({ onVolver }) {
       <div style={{ fontSize: 20, fontWeight: 600, marginBottom: 20 }}>
         Progreso
       </div>
-
       <div style={{ fontSize: 11, color: '#888', marginBottom: 8 }}>
         Este mes
       </div>
@@ -295,7 +306,6 @@ function ProgresoGeneral({ onVolver }) {
           </div>
         ))}
       </div>
-
       <div
         style={{
           background: '#F8FAFF',
@@ -309,27 +319,24 @@ function ProgresoGeneral({ onVolver }) {
           Consistencia — últimas 8 semanas
         </div>
         <div style={{ display: 'flex', gap: 4 }}>
-          {semanas8.map((count, i) => {
-            const color =
-              count === 0
-                ? '#EEE'
-                : count / maxSemana < 0.4
-                ? '#BBF7D0'
-                : count / maxSemana < 0.7
-                ? '#86EFAC'
-                : '#22C55E';
-            return (
-              <div
-                key={i}
-                style={{
-                  flex: 1,
-                  height: 14,
-                  borderRadius: 3,
-                  background: color,
-                }}
-              />
-            );
-          })}
+          {semanas8.map((c, i) => (
+            <div
+              key={i}
+              style={{
+                flex: 1,
+                height: 14,
+                borderRadius: 3,
+                background:
+                  c === 0
+                    ? '#EEE'
+                    : c / maxSemana < 0.4
+                    ? '#BBF7D0'
+                    : c / maxSemana < 0.7
+                    ? '#86EFAC'
+                    : '#22C55E',
+              }}
+            />
+          ))}
         </div>
         <div
           style={{
@@ -342,7 +349,6 @@ function ProgresoGeneral({ onVolver }) {
           <div style={{ fontSize: 9, color: '#aaa' }}>hoy</div>
         </div>
       </div>
-
       {promediosPorGrupo.length > 0 && (
         <div
           style={{
@@ -409,7 +415,6 @@ function ProgresoGeneral({ onVolver }) {
           ))}
         </div>
       )}
-
       {progresosConDiff.length > 0 && (
         <div
           style={{
@@ -457,7 +462,6 @@ function ProgresoGeneral({ onVolver }) {
           ))}
         </div>
       )}
-
       {estancados.length > 0 && (
         <div
           style={{
@@ -701,6 +705,7 @@ function RepositorioEjercicios({ onSeleccionar, onCerrar }) {
   const [ejerciciosUsuario, setEjerciciosUsuario] = useState([]);
   const [nuevoNombre, setNuevoNombre] = useState('');
   const [guardando, setGuardando] = useState(false);
+
   useEffect(() => {
     supabase
       .from('ejercicios_base')
@@ -713,6 +718,7 @@ function RepositorioEjercicios({ onSeleccionar, onCerrar }) {
       .order('nombre')
       .then(({ data }) => setEjerciciosUsuario(data || []));
   }, []);
+
   const grupos = [
     'Todos',
     ...Array.from(new Set(ejerciciosBase.map((e) => e.grupo))),
@@ -745,13 +751,21 @@ function RepositorioEjercicios({ onSeleccionar, onCerrar }) {
     setNuevoNombre('');
     setGuardando(false);
   };
+
   return (
     <div
       style={{
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        background: '#fff',
+        zIndex: 200,
+        overflowY: 'auto',
+        padding: '20px 16px',
         maxWidth: 420,
         margin: '0 auto',
-        padding: '20px 16px',
-        fontFamily: 'sans-serif',
       }}
     >
       <div
@@ -762,7 +776,9 @@ function RepositorioEjercicios({ onSeleccionar, onCerrar }) {
           marginBottom: 16,
         }}
       >
-        <div style={{ fontSize: 18, fontWeight: 600 }}>Ejercicios</div>
+        <div style={{ fontSize: 18, fontWeight: 600, color: '#333' }}>
+          Ejercicios
+        </div>
         <button
           onClick={onCerrar}
           style={{
@@ -781,14 +797,10 @@ function RepositorioEjercicios({ onSeleccionar, onCerrar }) {
         onChange={(e) => setBusqueda(e.target.value)}
         placeholder="Buscar ejercicio..."
         style={{
+          ...inputStyle,
           width: '100%',
           boxSizing: 'border-box',
-          border: '1px solid #DBEAFE',
-          borderRadius: 8,
-          padding: '8px 12px',
-          fontSize: 14,
           marginBottom: 10,
-          outline: 'none',
         }}
       />
       <div
@@ -838,7 +850,7 @@ function RepositorioEjercicios({ onSeleccionar, onCerrar }) {
                 marginBottom: 4,
               }}
             >
-              <div style={{ fontSize: 13 }}>{ej.nombre}</div>
+              <div style={{ fontSize: 13, color: '#333' }}>{ej.nombre}</div>
               <button
                 onClick={() => onSeleccionar(ej.nombre)}
                 style={{
@@ -876,14 +888,7 @@ function RepositorioEjercicios({ onSeleccionar, onCerrar }) {
             onChange={(e) => setNuevoNombre(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && agregarPersonalizado()}
             placeholder="Nombre del ejercicio..."
-            style={{
-              flex: 1,
-              border: '1px solid #DBEAFE',
-              borderRadius: 8,
-              padding: '7px 10px',
-              fontSize: 13,
-              outline: 'none',
-            }}
+            style={{ ...inputStyle, flex: 1 }}
           />
           <button
             onClick={agregarPersonalizado}
@@ -933,9 +938,13 @@ function CreadorRutinas({ onVolver, rutinaEditar }) {
     Object.fromEntries(diasSemana.map((d) => [d, '']))
   );
   const [mostrarRepo, setMostrarRepo] = useState(null);
+  const [mostrarInputDia, setMostrarInputDia] = useState(null);
+  const ejerciciosRefs = useRef({});
+
   const toggleDia = (d) => setDiasActivos((p) => ({ ...p, [d]: !p[d] }));
   const setNombreDia = (d, v) =>
     setEjerciciosPorDia((p) => ({ ...p, [d]: { ...p[d], nombre: v } }));
+
   const agregarEjercicio = (dia, n) => {
     const nombre = n || nuevoEj[dia];
     if (!nombre.trim()) return;
@@ -950,7 +959,16 @@ function CreadorRutinas({ onVolver, rutinaEditar }) {
       },
     }));
     if (!n) setNuevoEj((p) => ({ ...p, [dia]: '' }));
+    setMostrarInputDia(null);
+    setTimeout(() => {
+      const key = `${dia}-${(ejerciciosPorDia[dia]?.ejercicios || []).length}`;
+      ejerciciosRefs.current[key]?.scrollIntoView({
+        behavior: 'smooth',
+        block: 'center',
+      });
+    }, 100);
   };
+
   const eliminarEj = (dia, idx) =>
     setEjerciciosPorDia((p) => ({
       ...p,
@@ -998,18 +1016,18 @@ function CreadorRutinas({ onVolver, rutinaEditar }) {
     setGuardando(false);
     onVolver();
   };
+
   if (mostrarRepo)
     return (
-      <div style={{ position: 'relative', minHeight: '100vh' }}>
-        <RepositorioEjercicios
-          onSeleccionar={(n) => {
-            agregarEjercicio(mostrarRepo, n);
-            setMostrarRepo(null);
-          }}
-          onCerrar={() => setMostrarRepo(null)}
-        />
-      </div>
+      <RepositorioEjercicios
+        onSeleccionar={(n) => {
+          agregarEjercicio(mostrarRepo, n);
+          setMostrarRepo(null);
+        }}
+        onCerrar={() => setMostrarRepo(null)}
+      />
     );
+
   return (
     <div
       style={{
@@ -1041,16 +1059,13 @@ function CreadorRutinas({ onVolver, rutinaEditar }) {
         onChange={(e) => setNombre(e.target.value)}
         placeholder="Nombre de la rutina"
         style={{
+          ...inputStyle,
           width: '100%',
           boxSizing: 'border-box',
-          border: '1px solid #DBEAFE',
-          borderRadius: 8,
-          padding: '8px 12px',
-          fontSize: 14,
           marginBottom: 16,
-          outline: 'none',
         }}
       />
+
       <div style={{ fontSize: 11, color: '#888', marginBottom: 8 }}>
         Días de entrenamiento
       </div>
@@ -1101,6 +1116,7 @@ function CreadorRutinas({ onVolver, rutinaEditar }) {
       <div style={{ fontSize: 10, color: '#aaa', marginBottom: 16 }}>
         Tocá para activar o poner en descanso
       </div>
+
       <div
         style={{
           display: 'flex',
@@ -1130,6 +1146,7 @@ function CreadorRutinas({ onVolver, rutinaEditar }) {
             fontWeight: 600,
             minWidth: 24,
             textAlign: 'center',
+            color: '#333',
           }}
         >
           {semanas}
@@ -1150,6 +1167,7 @@ function CreadorRutinas({ onVolver, rutinaEditar }) {
         </button>
         <div style={{ fontSize: 13, color: '#555' }}>semanas</div>
       </div>
+
       <div style={{ fontSize: 11, color: '#888', marginBottom: 10 }}>
         Ejercicios por día
       </div>
@@ -1168,184 +1186,283 @@ function CreadorRutinas({ onVolver, rutinaEditar }) {
           >
             <div
               style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
+                fontSize: 13,
+                fontWeight: 600,
+                color: '#1D4ED8',
                 marginBottom: 8,
               }}
             >
-              <div style={{ fontSize: 13, fontWeight: 600, color: '#1D4ED8' }}>
-                {diasNombre[dia]}
-              </div>
-              <button
-                onClick={() => setMostrarRepo(dia)}
-                style={{
-                  fontSize: 11,
-                  color: '#3B82F6',
-                  background: '#EFF6FF',
-                  border: '1px solid #BFDBFE',
-                  borderRadius: 6,
-                  padding: '3px 8px',
-                  cursor: 'pointer',
-                }}
-              >
-                + del repositorio
-              </button>
+              {diasNombre[dia]}
             </div>
             <input
               value={ejerciciosPorDia[dia]?.nombre || ''}
               onChange={(e) => setNombreDia(dia, e.target.value)}
-              placeholder="Nombre del día (ej: Pecho + Tríceps)"
+              placeholder="Descripción del día (ej: Pecho + Tríceps)"
               style={{
+                ...inputStyle,
                 width: '100%',
                 boxSizing: 'border-box',
-                border: '1px solid #DBEAFE',
-                borderRadius: 8,
-                padding: '6px 10px',
-                fontSize: 13,
                 marginBottom: 10,
-                outline: 'none',
-                background: '#fff',
               }}
             />
+
             {(ejerciciosPorDia[dia]?.ejercicios || []).map((ej, idx) => (
               <div
                 key={idx}
+                ref={(el) => (ejerciciosRefs.current[`${dia}-${idx}`] = el)}
                 style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 6,
+                  background: '#fff',
+                  border: '1px solid #DBEAFE',
+                  borderRadius: 10,
+                  padding: '10px 12px',
                   marginBottom: 6,
                 }}
               >
                 <div
-                  style={{ display: 'flex', flexDirection: 'column', gap: 1 }}
-                >
-                  <button
-                    onClick={() => moverEj(dia, idx, -1)}
-                    style={{
-                      background: 'none',
-                      border: 'none',
-                      cursor: 'pointer',
-                      fontSize: 10,
-                      color: '#aaa',
-                      padding: 0,
-                      lineHeight: 1,
-                    }}
-                  >
-                    ▲
-                  </button>
-                  <button
-                    onClick={() => moverEj(dia, idx, 1)}
-                    style={{
-                      background: 'none',
-                      border: 'none',
-                      cursor: 'pointer',
-                      fontSize: 10,
-                      color: '#aaa',
-                      padding: 0,
-                      lineHeight: 1,
-                    }}
-                  >
-                    ▼
-                  </button>
-                </div>
-                <div
                   style={{
-                    flex: 1,
-                    background: '#fff',
-                    border: '1px solid #DBEAFE',
-                    borderRadius: 8,
-                    padding: '6px 8px',
-                    fontSize: 12,
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    marginBottom: 8,
                   }}
                 >
-                  <div style={{ marginBottom: 4 }}>{ej.nombre}</div>
-                  <div style={{ display: 'flex', gap: 6 }}>
-                    {[
-                      ['Series', 'series'],
-                      ['Reps', 'reps'],
-                    ].map(([label, campo]) => (
-                      <div
-                        key={campo}
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: 3,
-                        }}
-                      >
-                        <span style={{ fontSize: 10, color: '#888' }}>
-                          {label}:
-                        </span>
-                        <input
-                          type="number"
-                          value={ej[campo]}
-                          onChange={(e) =>
-                            actualizarEj(dia, idx, campo, e.target.value)
-                          }
-                          style={{
-                            width: 36,
-                            border: '1px solid #DBEAFE',
-                            borderRadius: 4,
-                            padding: '2px 4px',
-                            fontSize: 11,
-                            textAlign: 'center',
-                            outline: 'none',
-                          }}
-                        />
-                      </div>
-                    ))}
+                  <div style={{ fontSize: 13, fontWeight: 500, color: '#333' }}>
+                    {ej.nombre}
+                  </div>
+                  <div style={{ display: 'flex', gap: 4 }}>
+                    <button
+                      onClick={() => moverEj(dia, idx, -1)}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        cursor: 'pointer',
+                        fontSize: 11,
+                        color: '#aaa',
+                        padding: '0 2px',
+                      }}
+                    >
+                      ▲
+                    </button>
+                    <button
+                      onClick={() => moverEj(dia, idx, 1)}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        cursor: 'pointer',
+                        fontSize: 11,
+                        color: '#aaa',
+                        padding: '0 2px',
+                      }}
+                    >
+                      ▼
+                    </button>
+                    <button
+                      onClick={() => eliminarEj(dia, idx)}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        cursor: 'pointer',
+                        fontSize: 16,
+                        color: '#ccc',
+                        padding: '0 2px',
+                      }}
+                    >
+                      ×
+                    </button>
                   </div>
                 </div>
-                <button
-                  onClick={() => eliminarEj(dia, idx)}
-                  style={{
-                    background: 'none',
-                    border: 'none',
-                    cursor: 'pointer',
-                    fontSize: 16,
-                    color: '#aaa',
-                  }}
-                >
-                  ×
-                </button>
+                <div style={{ display: 'flex', gap: 16 }}>
+                  <div>
+                    <div
+                      style={{ fontSize: 10, color: '#888', marginBottom: 4 }}
+                    >
+                      Series
+                    </div>
+                    <div
+                      style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+                    >
+                      <button
+                        onClick={() =>
+                          actualizarEj(
+                            dia,
+                            idx,
+                            'series',
+                            Math.max(1, ej.series - 1)
+                          )
+                        }
+                        style={{
+                          width: 24,
+                          height: 24,
+                          borderRadius: '50%',
+                          border: '1px solid #DBEAFE',
+                          background: '#F8FAFF',
+                          cursor: 'pointer',
+                          fontSize: 14,
+                          color: '#555',
+                        }}
+                      >
+                        −
+                      </button>
+                      <span
+                        style={{
+                          fontSize: 14,
+                          fontWeight: 600,
+                          color: '#333',
+                          minWidth: 16,
+                          textAlign: 'center',
+                        }}
+                      >
+                        {ej.series}
+                      </span>
+                      <button
+                        onClick={() =>
+                          actualizarEj(dia, idx, 'series', ej.series + 1)
+                        }
+                        style={{
+                          width: 24,
+                          height: 24,
+                          borderRadius: '50%',
+                          border: '1px solid #DBEAFE',
+                          background: '#F8FAFF',
+                          cursor: 'pointer',
+                          fontSize: 14,
+                          color: '#555',
+                        }}
+                      >
+                        +
+                      </button>
+                    </div>
+                  </div>
+                  <div>
+                    <div
+                      style={{ fontSize: 10, color: '#888', marginBottom: 4 }}
+                    >
+                      Reps est.
+                    </div>
+                    <div
+                      style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+                    >
+                      <button
+                        onClick={() =>
+                          actualizarEj(
+                            dia,
+                            idx,
+                            'reps',
+                            Math.max(1, ej.reps - 1)
+                          )
+                        }
+                        style={{
+                          width: 24,
+                          height: 24,
+                          borderRadius: '50%',
+                          border: '1px solid #DBEAFE',
+                          background: '#F8FAFF',
+                          cursor: 'pointer',
+                          fontSize: 14,
+                          color: '#555',
+                        }}
+                      >
+                        −
+                      </button>
+                      <span
+                        style={{
+                          fontSize: 14,
+                          fontWeight: 600,
+                          color: '#333',
+                          minWidth: 20,
+                          textAlign: 'center',
+                        }}
+                      >
+                        {ej.reps}
+                      </span>
+                      <button
+                        onClick={() =>
+                          actualizarEj(dia, idx, 'reps', ej.reps + 1)
+                        }
+                        style={{
+                          width: 24,
+                          height: 24,
+                          borderRadius: '50%',
+                          border: '1px solid #DBEAFE',
+                          background: '#F8FAFF',
+                          cursor: 'pointer',
+                          fontSize: 14,
+                          color: '#555',
+                        }}
+                      >
+                        +
+                      </button>
+                    </div>
+                  </div>
+                </div>
               </div>
             ))}
-            <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
-              <input
-                value={nuevoEj[dia]}
-                onChange={(e) =>
-                  setNuevoEj((p) => ({ ...p, [dia]: e.target.value }))
-                }
-                onKeyDown={(e) => e.key === 'Enter' && agregarEjercicio(dia)}
-                placeholder="Escribir ejercicio..."
+
+            <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
+              <button
+                onClick={() => setMostrarRepo(dia)}
                 style={{
                   flex: 1,
-                  border: '1px solid #DBEAFE',
-                  borderRadius: 8,
-                  padding: '6px 10px',
                   fontSize: 12,
-                  outline: 'none',
-                  background: '#fff',
-                }}
-              />
-              <button
-                onClick={() => agregarEjercicio(dia)}
-                style={{
-                  background: '#3B82F6',
-                  color: '#fff',
-                  border: 'none',
+                  color: '#3B82F6',
+                  background: '#EFF6FF',
+                  border: '1px solid #BFDBFE',
                   borderRadius: 8,
-                  padding: '6px 12px',
-                  fontSize: 12,
+                  padding: '8px 6px',
                   cursor: 'pointer',
                 }}
               >
-                +
+                + Del repositorio
+              </button>
+              <button
+                onClick={() =>
+                  setMostrarInputDia(mostrarInputDia === dia ? null : dia)
+                }
+                style={{
+                  flex: 1,
+                  fontSize: 12,
+                  color: '#555',
+                  background: '#F9F9F9',
+                  border: '1px solid #E0E0E0',
+                  borderRadius: 8,
+                  padding: '8px 6px',
+                  cursor: 'pointer',
+                }}
+              >
+                + Escribir otro
               </button>
             </div>
+            {mostrarInputDia === dia && (
+              <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
+                <input
+                  value={nuevoEj[dia]}
+                  onChange={(e) =>
+                    setNuevoEj((p) => ({ ...p, [dia]: e.target.value }))
+                  }
+                  onKeyDown={(e) => e.key === 'Enter' && agregarEjercicio(dia)}
+                  placeholder="Nombre del ejercicio..."
+                  autoFocus
+                  style={{ ...inputStyle, flex: 1 }}
+                />
+                <button
+                  onClick={() => agregarEjercicio(dia)}
+                  style={{
+                    background: '#3B82F6',
+                    color: '#fff',
+                    border: 'none',
+                    borderRadius: 8,
+                    padding: '6px 12px',
+                    fontSize: 12,
+                    cursor: 'pointer',
+                  }}
+                >
+                  +
+                </button>
+              </div>
+            )}
           </div>
         ))}
+
       <button
         onClick={guardar}
         disabled={guardando}
@@ -1457,7 +1574,14 @@ function Repositorio({ onVolver, onNueva, onEditar, onActivar }) {
               marginBottom: 10,
             }}
           >
-            <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 2 }}>
+            <div
+              style={{
+                fontSize: 15,
+                fontWeight: 600,
+                marginBottom: 2,
+                color: '#333',
+              }}
+            >
               {r.nombre}
             </div>
             <div style={{ fontSize: 11, color: '#888', marginBottom: 10 }}>
@@ -1600,7 +1724,14 @@ function ProgresoEjercicio({ nombre, onVolver }) {
       <div style={{ fontSize: 11, color: '#888', marginBottom: 2 }}>
         Progreso
       </div>
-      <div style={{ fontSize: 18, fontWeight: 600, marginBottom: 20 }}>
+      <div
+        style={{
+          fontSize: 18,
+          fontWeight: 600,
+          marginBottom: 20,
+          color: '#333',
+        }}
+      >
         {nombre}
       </div>
       {cargando ? (
@@ -1809,9 +1940,9 @@ function SesionActiva({ dia, rutina, onTerminar }) {
         const hist = {};
         rutina.ejercicios.forEach((ej) => {
           for (const s of data) {
-            const encontrado = s.datos?.find((d) => d.ejercicio === ej.nombre);
-            if (encontrado) {
-              hist[ej.nombre] = encontrado;
+            const e = s.datos?.find((d) => d.ejercicio === ej.nombre);
+            if (e) {
+              hist[ej.nombre] = e;
               break;
             }
           }
@@ -1867,6 +1998,7 @@ function SesionActiva({ dia, rutina, onTerminar }) {
         onVolver={() => setVerProgreso(null)}
       />
     );
+
   return (
     <div
       style={{
@@ -1888,7 +2020,9 @@ function SesionActiva({ dia, rutina, onTerminar }) {
           <div style={{ fontSize: 12, color: '#3B82F6', fontWeight: 600 }}>
             {dia} · en curso
           </div>
-          <div style={{ fontSize: 20, fontWeight: 600 }}>{rutina.nombre}</div>
+          <div style={{ fontSize: 20, fontWeight: 600, color: '#333' }}>
+            {rutina.nombre}
+          </div>
         </div>
         <div
           style={{
@@ -1939,7 +2073,9 @@ function SesionActiva({ dia, rutina, onTerminar }) {
                   marginBottom: 6,
                 }}
               >
-                <div style={{ fontSize: 14, fontWeight: 600 }}>{ej.nombre}</div>
+                <div style={{ fontSize: 14, fontWeight: 600, color: '#333' }}>
+                  {ej.nombre}
+                </div>
                 <button
                   onClick={() => setVerProgreso(ej.nombre)}
                   style={{
@@ -2020,15 +2156,11 @@ function SesionActiva({ dia, rutina, onTerminar }) {
                         actualizarSerie(ei, si, c, e.target.value)
                       }
                       style={{
-                        border: '1px solid #DBEAFE',
-                        borderRadius: 8,
-                        padding: '6px 8px',
-                        fontSize: 14,
-                        background: '#fff',
+                        ...inputStyle,
                         textAlign: 'center',
-                        outline: 'none',
                         width: '100%',
                         boxSizing: 'border-box',
+                        color: '#374151',
                       }}
                     />
                   ))}
@@ -2043,32 +2175,53 @@ function SesionActiva({ dia, rutina, onTerminar }) {
                   border: 'none',
                   cursor: 'pointer',
                   padding: '2px 0',
-                  marginBottom: 10,
+                  marginBottom: 12,
                 }}
               >
                 + agregar serie
               </button>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <span style={{ fontSize: 11, color: '#888' }}>Sensación:</span>
-                {[1, 2, 3, 4, 5].map((n) => (
-                  <button
-                    key={n}
-                    onClick={() => actualizarVal(ei, n)}
-                    style={{
-                      width: 28,
-                      height: 28,
-                      borderRadius: '50%',
-                      border: 'none',
-                      cursor: 'pointer',
-                      fontSize: 13,
-                      fontWeight: 600,
-                      background: datos[ei].val === n ? '#3B82F6' : '#E8F0FE',
-                      color: datos[ei].val === n ? '#fff' : '#3B82F6',
-                    }}
-                  >
-                    {n}
-                  </button>
-                ))}
+
+              <div>
+                <div
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    marginBottom: 4,
+                  }}
+                >
+                  <span style={{ fontSize: 10, color: '#aaa' }}>
+                    Sin estímulo
+                  </span>
+                  <span style={{ fontSize: 10, color: '#aaa' }}>
+                    Máximo esfuerzo
+                  </span>
+                </div>
+                <div style={{ display: 'flex', gap: 4 }}>
+                  {[1, 2, 3, 4, 5].map((n) => (
+                    <button
+                      key={n}
+                      onClick={() => actualizarVal(ei, n)}
+                      style={{
+                        flex: 1,
+                        height: 32,
+                        borderRadius: 8,
+                        border: 'none',
+                        cursor: 'pointer',
+                        fontSize: 13,
+                        fontWeight: 600,
+                        background:
+                          datos[ei].val === n ? sensacionColores[n] : '#F0F4FF',
+                        color:
+                          datos[ei].val === n
+                            ? sensacionTextoColores[n]
+                            : '#93C5FD',
+                        transition: 'all 0.15s',
+                      }}
+                    >
+                      {n}
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
           );
@@ -2107,7 +2260,14 @@ function ResumenSesion({ rutina, segundos, datos, onVolver }) {
     >
       <div style={{ textAlign: 'center', marginBottom: 28 }}>
         <div style={{ fontSize: 40 }}>🎉</div>
-        <h2 style={{ fontSize: 22, fontWeight: 700, margin: '8px 0 4px' }}>
+        <h2
+          style={{
+            fontSize: 22,
+            fontWeight: 700,
+            margin: '8px 0 4px',
+            color: '#333',
+          }}
+        >
           ¡Sesión completada!
         </h2>
         <div style={{ color: '#888', fontSize: 14 }}>{rutina.nombre}</div>
@@ -2154,17 +2314,31 @@ function ResumenSesion({ rutina, segundos, datos, onVolver }) {
                 marginBottom: 6,
                 display: 'flex',
                 justifyContent: 'space-between',
+                color: '#333',
               }}
             >
               <span>{ej.nombre}</span>
-              <span style={{ color: '#3B82F6', fontSize: 12 }}>
+              <span
+                style={{
+                  color: sensacionColores[datos[ei].val] || '#3B82F6',
+                  fontSize: 12,
+                  background: datos[ei].val
+                    ? sensacionColores[datos[ei].val]
+                    : '#EFF6FF',
+                  padding: '2px 8px',
+                  borderRadius: 12,
+                  color: datos[ei].val
+                    ? sensacionTextoColores[datos[ei].val]
+                    : '#3B82F6',
+                }}
+              >
                 ★{datos[ei].val || '-'}
               </span>
             </div>
             {datos[ei].series.map((s, si) => (
               <div
                 key={si}
-                style={{ fontSize: 12, color: '#888', marginBottom: 2 }}
+                style={{ fontSize: 12, color: '#666', marginBottom: 2 }}
               >
                 S{si + 1}: {s.reps || '-'} reps · {s.peso || '-'} kg
               </div>
@@ -2341,7 +2515,9 @@ export default function App() {
         }}
       >
         <div>
-          <div style={{ fontSize: 22, fontWeight: 600 }}>FitTrack</div>
+          <div style={{ fontSize: 22, fontWeight: 600, color: '#333' }}>
+            FitTrack
+          </div>
           <div style={{ fontSize: 11, color: '#888' }}>
             {hoy.toLocaleDateString('es-ES', {
               weekday: 'long',
@@ -2400,7 +2576,14 @@ export default function App() {
           <div style={{ fontSize: 10, color: '#888', marginBottom: 3 }}>
             Hoy · {diaHoyKey}
           </div>
-          <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 2 }}>
+          <div
+            style={{
+              fontSize: 15,
+              fontWeight: 600,
+              marginBottom: 2,
+              color: '#333',
+            }}
+          >
             {rutinaHoy.nombre}
           </div>
           <div style={{ fontSize: 12, color: '#888', marginBottom: 10 }}>
@@ -2460,7 +2643,14 @@ export default function App() {
             >
               {diaSeleccionado}
             </div>
-            <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 10 }}>
+            <div
+              style={{
+                fontSize: 15,
+                fontWeight: 600,
+                marginBottom: 10,
+                color: '#333',
+              }}
+            >
               {rutinaActiva.dias[diaSeleccionado].nombre}
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -2476,6 +2666,7 @@ export default function App() {
                       border: '1px solid #E0ECFF',
                       display: 'flex',
                       justifyContent: 'space-between',
+                      color: '#333',
                     }}
                   >
                     <span>{ej.nombre}</span>
@@ -2615,3 +2806,4 @@ export default function App() {
     </div>
   );
 }
+
